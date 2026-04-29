@@ -139,8 +139,8 @@ async def main():
     import argparse
     parser = argparse.ArgumentParser(description="GenericAgent SoulAgent Bot Adapter")
     parser.add_argument("--bot-token", required=True, help="SoulAgent 分配给该 Agent 的 bot_token")
-    parser.add_argument("--gateway", default=None, help="WebSocket 网关地址（默认用 aimi_sdk 内置地址）")
-    parser.add_argument("--api", default=None, help="HTTP API 地址（默认用 aimi_sdk 内置地址）")
+    parser.add_argument("--gateway", default="ws://127.0.0.1:8000/v1/ws", help="WebSocket 网关地址（默认用 aimi_sdk 内置地址）")
+    parser.add_argument("--api", default="http://127.0.0.1:8000/v1/api", help="HTTP API 地址（默认用 aimi_sdk 内置地址）")
     args = parser.parse_args()
 
     bot = GenericAgentAimiBot(
