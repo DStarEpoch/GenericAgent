@@ -38,6 +38,8 @@ class GenericAgentAimiBot:
         )
         self.agent = GeneraticAgent()
         self._agent_thread = None
+        self._session_roles: dict[str, str] = {}
+        self._lock = asyncio.Lock()
 
     def _start_agent_loop(self):
         """GenericAgent.run() 是阻塞无限循环，必须在后台线程跑。"""
@@ -100,13 +102,28 @@ class GenericAgentAimiBot:
 
         print(f"[GenericAgent Bot] 收到消息: {text[:120]}...")
 
-        # 把任务扔进 GenericAgent 队列
-        display_q = self.agent.put_task(text, source="user")
+        async with self._lock:
+            # 获取并缓存 session role
+            if session_id and session_id not in self._session_roles:
+                try:
+                    role = await self.client.get_session_role_prompt(session_id)
+                    self._session_roles[session_id] = role
+                except Exception as e:
+                    print(f"[GenericAgent Bot] get_session_role_prompt failed: {e}")
+                    self._session_roles[session_id] = ""
 
-        # 消费结果并回传
-        result = await self._consume_queue(display_q)
-        if result:
-            await self.client.send_message(session_id=session_id, text=result)
+            role = self._session_roles.get(session_id, "")
+            if hasattr(self.agent, 'llmclient') and self.agent.llmclient:
+                role = f"# Session Role Context\n\n{role}"
+                setattr(self.agent.llmclient.backend, 'extra_sys_prompt', role)
+
+            # 把任务扔进 GenericAgent 队列
+            display_q = self.agent.put_task(text, source="user")
+
+            # 消费结果并回传
+            result = await self._consume_queue(display_q)
+            if result:
+                await self.client.send_message(session_id=session_id, text=result)
 
     async def _consume_queue(self, display_q: queue.Queue) -> str:
         """
@@ -139,8 +156,8 @@ async def main():
     import argparse
     parser = argparse.ArgumentParser(description="GenericAgent SoulAgent Bot Adapter")
     parser.add_argument("--bot-token", required=True, help="SoulAgent 分配给该 Agent 的 bot_token")
-    parser.add_argument("--gateway", default="ws://127.0.0.1:8000/v1/ws", help="WebSocket 网关地址（默认用 aimi_sdk 内置地址）")
-    parser.add_argument("--api", default="http://127.0.0.1:8000/v1/api", help="HTTP API 地址（默认用 aimi_sdk 内置地址）")
+    parser.add_argument("--gateway", default=None, help="WebSocket 网关地址（默认用 aimi_sdk 内置地址）")
+    parser.add_argument("--api", default=None, help="HTTP API 地址（默认用 aimi_sdk 内置地址）")
     args = parser.parse_args()
 
     bot = GenericAgentAimiBot(
